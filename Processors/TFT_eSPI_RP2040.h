@@ -27,6 +27,13 @@
   #define SUPPORT_TRANSACTIONS
 #endif
 
+// Helpers for PIO base checks
+#define MIN2(a, b) ( (a)<(b) ? (a) : (b) )
+#define MIN3(a, b, c) MIN2(MIN2(a, b), c)
+
+#define MAX2(a, b) ( (a)>(b) ? (a) : (b) )
+#define MAX3(a, b, c) MAX2(MAX2(a, b), c)
+
 // Include processor specific header
 // None
 
@@ -121,15 +128,33 @@
   #endif
 
   // Initialise TFT data bus
+  #if defined TFT_PARALLEL_8_BIT
+    #define PARALLEL_PIN_C 8
+  #elif defined TFT_PARALLEL_16_BIT
+    #define PARALLEL_PIN_C 16
+  #endif
+
   #if defined (TFT_PARALLEL_8_BIT) || defined (TFT_PARALLEL_16_BIT)
+
+  #if !( (MIN3(TFT_DC, TFT_WR, TFT_D0) < 32 && MAX3(TFT_DC, TFT_WR, (TFT_D0 + PARALLEL_PIN_C - 1)) < 32) ||\
+         (MIN3(TFT_DC, TFT_WR, TFT_D0) >= 16 && MAX3(TFT_DC, TFT_WR, (TFT_D0 + PARALLEL_PIN_C - 1)) >= 16) )
+  #error "TFT_DC, TFT_WR, TFT_D0, TFT_D1...2 all must be either below pin 32 or above pin 15 for RP2350B chips!"
+  #endif
+
     #define INIT_TFT_DATA_BUS pioinit(DIV_UNITS, DIV_FRACT);
   #elif defined (RP2040_PIO_SPI)
+
+    #if !( (MIN3(TFT_DC, TFT_SCLK, TFT_MOSI) < 32 && MAX3(TFT_DC, TFT_SCLK, TFT_MOSI) < 32) ||\
+           (MIN3(TFT_DC, TFT_SCLK, TFT_MOSI) >= 16 && MAX3(TFT_DC, TFT_SCLK, TFT_MOSI) >= 16))
+    #error "TFT_DC, TFT_SCLK, and TFT_MOSI all must be either below pin 32 or above pin 15 for RP2350B chips!"
+    #endif
+
     #define INIT_TFT_DATA_BUS pioinit(SPI_FREQUENCY);
   #endif
 
   #define SPI_BUSY_CHECK
 
-  // Set the state machine clock divider (from integer and fractional parts - 16:8) 
+  // Set the state machine clock divider (from integer and fractional parts - 16:8)
   #define PARALLEL_INIT_TFT_DATA_BUS // Not used
 
 #endif
@@ -150,14 +175,12 @@
   #define DC_D // No macro allocated so it generates no code
 #else
   #if !defined (RP2040_PIO_INTERFACE)// SPI
-    //#define DC_C sio_hw->gpio_clr = (1ul << TFT_DC)
-    //#define DC_D sio_hw->gpio_set = (1ul << TFT_DC)
     #if  defined (RPI_DISPLAY_TYPE) && !defined (MHS_DISPLAY_TYPE)
       #define DC_C digitalWrite(TFT_DC, LOW);
       #define DC_D digitalWrite(TFT_DC, HIGH);
     #else
-      #define DC_C sio_hw->gpio_clr = (1ul << TFT_DC)
-      #define DC_D sio_hw->gpio_set = (1ul << TFT_DC)
+      #define DC_C gpio_put(TFT_DC, 0);
+      #define DC_D gpio_put(TFT_DC, 1);
     #endif
   #else
     // PIO takes control of TFT_DC
@@ -187,12 +210,12 @@
       #define CS_L digitalWrite(TFT_CS, LOW);
       #define CS_H digitalWrite(TFT_CS, HIGH);
     #else
-      #define CS_L sio_hw->gpio_clr = (1ul << TFT_CS)
-      #define CS_H sio_hw->gpio_set = (1ul << TFT_CS)
+      #define CS_L gpio_put(TFT_CS, 0);
+      #define CS_H gpio_put(TFT_CS, 1);
     #endif
   #else // PIO interface display
-    #define CS_L sio_hw->gpio_clr = (1ul << TFT_CS)
-    #define CS_H WAIT_FOR_STALL; sio_hw->gpio_set = (1ul << TFT_CS)
+    #define CS_L gpio_put(TFT_CS, 0);
+    #define CS_H WAIT_FOR_STALL; gpio_put(TFT_CS, 1);
   #endif
 #endif
 
@@ -202,9 +225,9 @@
 // At the moment read is not supported for parallel mode, tie TFT signal high
 #ifdef TFT_RD
   #if (TFT_RD >= 0)
-    #define RD_L sio_hw->gpio_clr = (1ul << TFT_RD)
+    #define RD_L gpio_put(TFT_RD, 0);
     //#define RD_L digitalWrite(TFT_WR, LOW)
-    #define RD_H sio_hw->gpio_set = (1ul << TFT_RD)
+    #define RD_H gpio_put(TFT_RD, 1);
     //#define RD_H digitalWrite(TFT_WR, HIGH)
   #else
     #define RD_L
